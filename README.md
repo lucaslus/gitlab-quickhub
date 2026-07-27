@@ -64,6 +64,7 @@ GitLab 的项目活跃度不能准确代表“我最近使用过哪些项目”�
 - 面板右上角的刷新按钮会重新读取仓库和分支，并重新检查全部合入状态。
 - 检查中的目标状态使用无背景的三点明暗波动，不使用临时颜色；状态完成后在固定位置显示红、绿或灰色结果。系统启用“减少动态效果”时，三点保持静态。
 - 每个分支使用两行布局：第一行展示完整分支名和 MR 快捷入口，第二行展示提交日期及固定列宽的状态文字。状态结果不使用标签背景或边框，仅通过红、绿、灰文字区分。
+- 每个分支名后提供弱化的编辑图标，可添加、修改或清空本地描述；保存后展示为 `feature/xxxxx (描述)`。描述最长 120 个字符，仅保存在当前 GitLab origin 的浏览器本地存储中。
 - 每个分支右侧提供创建 MR 的快捷入口：当前 Fork 分支作为 source、对应 Upstream 作为 target project，默认目标分支为 `master`。链接会进入 GitLab 的分支确认流程，让 GitLab 先重新计算分支差异，用户仍可修改目标分支后再创建 MR。
 - 脚本从 Fork 读取业务分支，并自动对照对应 Upstream 的环境分支。
 - GitLab Branches API 返回的分支会按最新提交时间重新排序，只展示不属于 `dev`、`test`、`blue`、`master` 的前 5 个业务分支。
@@ -195,6 +196,7 @@ userscript 管理器必须在脚本安装时确定允许脚本加载的网站。
 | `gitlab-recent-mr-repos:cache:v3` | 标准化后的项目、MR 和抓取时间 | 默认有效 10 分钟 |
 | `gitlab-recent-mr-repos:update:v1` | 最近检查时间和已发布版本 | 默认有效 6 小时 |
 | `gitlab-recent-mr-repos:favorites:v1` | 收藏仓库的必要项目入口信息 | 直到取消收藏或清除站点数据 |
+| `gitlab-recent-mr-repos:branch-descriptions:v1` | 按项目 ID 和分支名保存的分支描述 | 直到清空描述或清除站点数据 |
 
 缓存用于减少重复 API 请求。缓存数据不会跨 origin 共享。
 
@@ -359,6 +361,7 @@ dist/gitlab-recent-projects.user.js
 - 搜索参数和 fallback。
 - 新建 MR、我的 MR、Pipelines URL。
 - 收藏数据的同源校验、去重、添加、移除和存储失败路径。
+- 分支描述的规范化、去重、添加、更新、删除和存储失败路径。
 - 多语言选择和插值。
 - GitLab 页面识别。
 - HTTPS origin 校验、启用、停用和存储失败。

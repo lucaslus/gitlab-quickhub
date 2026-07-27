@@ -31,8 +31,10 @@ const {
   normalizeBranch,
   normalizeMergeRequest,
   normalizeProject,
+  readBranchDescriptions,
   readFavoriteProjects,
   resolvePreferredLanguage,
+  saveBranchDescriptions,
   saveFavoriteProjects,
   selectRecentForkProjects,
   selectRecentBranches,
@@ -40,6 +42,7 @@ const {
   shouldUseCachedUserscriptUpdate,
   toggleFavoriteProject,
   translate,
+  updateBranchDescription,
 } = require('../src/gitlab-recent-projects.user.js');
 
 const ORIGIN = 'https://git.example.com';
@@ -123,6 +126,8 @@ test('fails closed when browser storage is unavailable', () => {
   assert.equal(isOriginEnabled(unavailableStorage, ORIGIN), false);
   assert.equal(enableOrigin(unavailableStorage, ORIGIN, ORIGIN), false);
   assert.equal(disableOrigin(unavailableStorage), false);
+  assert.deepEqual(readBranchDescriptions(unavailableStorage), []);
+  assert.equal(saveBranchDescriptions(unavailableStorage, []), false);
   assert.deepEqual(readFavoriteProjects(unavailableStorage, ORIGIN), []);
   assert.equal(saveFavoriteProjects(unavailableStorage, []), false);
 });
@@ -210,6 +215,46 @@ test('favorite toggling adds newest projects first and removes existing projects
   const withSecond = toggleFavoriteProject([first], second);
   assert.deepEqual(withSecond.map(({ id }) => id), [second.id, first.id]);
   assert.deepEqual(toggleFavoriteProject(withSecond, first).map(({ id }) => id), [second.id]);
+});
+
+test('branch descriptions persist normalized values and can be removed', () => {
+  const storage = memoryStorage();
+  const added = updateBranchDescription([], 2, 'feature/login', '  登录页联调  ');
+
+  assert.deepEqual(added, [{
+    projectId: 2,
+    branchName: 'feature/login',
+    description: '登录页联调',
+  }]);
+  assert.equal(saveBranchDescriptions(storage, added), true);
+  assert.deepEqual(readBranchDescriptions(storage), added);
+
+  const updated = updateBranchDescription(added, 2, 'feature/login', '准备提测');
+  assert.equal(updated.length, 1);
+  assert.equal(updated[0].description, '准备提测');
+  assert.deepEqual(updateBranchDescription(updated, 2, 'feature/login', '  '), []);
+});
+
+test('branch descriptions reject invalid entries, deduplicate branches, and limit length', () => {
+  const storage = memoryStorage();
+  storage.setItem('gitlab-recent-mr-repos:branch-descriptions:v1', JSON.stringify([
+    { projectId: 2, branchName: 'feature/login', description: 'first' },
+    { projectId: 0, branchName: 'feature/invalid', description: 'invalid project' },
+    { projectId: 2, branchName: '', description: 'invalid branch' },
+    { projectId: 2, branchName: 'feature/login', description: 'latest' },
+    { projectId: 3, branchName: 'feature/empty', description: '   ' },
+  ]));
+
+  assert.deepEqual(readBranchDescriptions(storage), [{
+    projectId: 2,
+    branchName: 'feature/login',
+    description: 'latest',
+  }]);
+
+  const longDescription = '😀'.repeat(140);
+  const limited = updateBranchDescription([], 3, 'feature/limited', longDescription);
+  assert.equal([...limited[0].description].length, 120);
+  assert.equal(limited[0].description.endsWith('😀'), true);
 });
 
 function mergeRequest(id, iid, sourceProjectId, targetProjectId, createdAt, targetPath = 'team/app') {
@@ -573,6 +618,14 @@ test('translations interpolate dynamic status values in both languages', () => {
   assert.equal(translate('en', 'goHome'), 'Back to recent MR repositories');
   assert.equal(translate('zh-CN', 'branchLegendMerged'), '已合入');
   assert.equal(translate('en', 'branchLegendUnavailable'), 'Unknown or missing');
+  assert.equal(
+    translate('zh-CN', 'editBranchDescription', { branch: 'feature/login' }),
+    '编辑 feature/login 的描述',
+  );
+  assert.equal(
+    translate('en', 'addBranchDescription', { branch: 'feature/login' }),
+    'Add a description to feature/login',
+  );
   assert.equal(
     translate('en', 'addFavorite', { project: 'team/app' }),
     'Add team/app to favorites',

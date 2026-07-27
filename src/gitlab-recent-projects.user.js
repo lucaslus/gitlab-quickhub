@@ -27,6 +27,7 @@
   const MAX_BRANCH_STATUS_PROJECTS = 10;
   const MAX_RECENT_BRANCHES_PER_PROJECT = 5;
   const MAX_BRANCHES_PER_PROJECT_REQUEST = 100;
+  const MAX_BRANCH_DESCRIPTION_LENGTH = 120;
   const BRANCH_TARGET_NAMES = ['dev', 'test', 'blue', 'master'];
   const MIN_SEARCH_QUERY_LENGTH = 2;
   const SEARCH_DEBOUNCE_MS = 350;
@@ -42,6 +43,7 @@
   const ENABLED_ORIGIN_STORAGE_KEY = 'gitlab-recent-mr-repos:enabled-origin:v1';
   const UPDATE_CACHE_STORAGE_KEY = 'gitlab-recent-mr-repos:update:v1';
   const FAVORITES_STORAGE_KEY = 'gitlab-recent-mr-repos:favorites:v1';
+  const BRANCH_DESCRIPTIONS_STORAGE_KEY = 'gitlab-recent-mr-repos:branch-descriptions:v1';
   const WIDGET_ID = 'gitlab-recent-mr-repos';
   const STYLE_ID = `${WIDGET_ID}-style`;
   const LANGUAGE_ZH_CN = 'zh-CN';
@@ -90,6 +92,13 @@
       branchStatusUnknown: '{target} 未知',
       branchStatusChecking: '{target} 检查中',
       branchStatusSemantics: 'Fork 对照 Upstream 环境分支；按 Git 提交祖先关系判断，squash / rebase 合并可能仍显示未合入。',
+      addBranchDescription: '为 {branch} 添加描述',
+      editBranchDescription: '编辑 {branch} 的描述',
+      branchDescriptionInput: '{branch} 的描述',
+      branchDescriptionPlaceholder: '添加分支描述',
+      saveBranchDescription: '保存描述',
+      cancelBranchDescription: '取消编辑',
+      branchDescriptionStorageFailed: '无法保存分支描述，请检查浏览器是否允许本站使用本地存储。',
       refreshRecent: '刷新最近 MR',
       refreshing: '正在刷新',
       searchPlaceholder: '搜索整个 GitLab 的仓库',
@@ -192,6 +201,13 @@
       branchStatusUnknown: '{target} unknown',
       branchStatusChecking: 'Checking {target}',
       branchStatusSemantics: 'Forks use Upstream targets. Git ancestry is used, so squash or rebase merges can still appear unmerged.',
+      addBranchDescription: 'Add a description to {branch}',
+      editBranchDescription: 'Edit the description for {branch}',
+      branchDescriptionInput: 'Description for {branch}',
+      branchDescriptionPlaceholder: 'Add a branch description',
+      saveBranchDescription: 'Save description',
+      cancelBranchDescription: 'Cancel editing',
+      branchDescriptionStorageFailed: 'Could not save the branch description. Check whether local storage is allowed for this site.',
       refreshRecent: 'Refresh recent MRs',
       refreshing: 'Refreshing',
       searchPlaceholder: 'Search repositories across GitLab',
@@ -874,6 +890,88 @@
     }
   }
 
+  function normalizeBranchDescription(value) {
+    if (typeof value !== 'string') return null;
+    return [...value.trim()].slice(0, MAX_BRANCH_DESCRIPTION_LENGTH).join('');
+  }
+
+  function branchDescriptionKey(projectId, branchName) {
+    return JSON.stringify([projectId, branchName]);
+  }
+
+  function normalizeBranchDescriptionEntry(value) {
+    if (!isRecord(value)
+      || !Number.isInteger(value.projectId)
+      || value.projectId <= 0
+      || typeof value.branchName !== 'string'
+      || value.branchName.trim() === '') {
+      return null;
+    }
+    const description = normalizeBranchDescription(value.description);
+    if (!description) return null;
+    return {
+      projectId: value.projectId,
+      branchName: value.branchName,
+      description,
+    };
+  }
+
+  function readBranchDescriptions(storage) {
+    try {
+      const raw = storage.getItem(BRANCH_DESCRIPTIONS_STORAGE_KEY);
+      if (raw === null) return [];
+      const value = JSON.parse(raw);
+      if (!Array.isArray(value)) return [];
+
+      const descriptionsByBranch = new Map();
+      for (const item of value) {
+        const description = normalizeBranchDescriptionEntry(item);
+        if (description) {
+          descriptionsByBranch.set(
+            branchDescriptionKey(description.projectId, description.branchName),
+            description,
+          );
+        }
+      }
+      return [...descriptionsByBranch.values()];
+    } catch {
+      return [];
+    }
+  }
+
+  function saveBranchDescriptions(storage, branchDescriptions) {
+    try {
+      storage.setItem(
+        BRANCH_DESCRIPTIONS_STORAGE_KEY,
+        JSON.stringify(branchDescriptions.map(normalizeBranchDescriptionEntry).filter(Boolean)),
+      );
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function updateBranchDescription(branchDescriptions, projectId, branchName, value) {
+    const normalizedDescription = normalizeBranchDescription(value);
+    if (!Number.isInteger(projectId)
+      || projectId <= 0
+      || typeof branchName !== 'string'
+      || branchName.trim() === ''
+      || normalizedDescription === null) {
+      return branchDescriptions;
+    }
+
+    const key = branchDescriptionKey(projectId, branchName);
+    const remainingDescriptions = branchDescriptions.filter((item) => (
+      branchDescriptionKey(item.projectId, item.branchName) !== key
+    ));
+    if (!normalizedDescription) return remainingDescriptions;
+    return [
+      ...remainingDescriptions,
+      { projectId, branchName, description: normalizedDescription },
+    ];
+  }
+
   function toggleFavoriteProject(favoriteProjects, project) {
     if (favoriteProjects.some(({ id }) => id === project.id)) {
       return favoriteProjects.filter(({ id }) => id !== project.id);
@@ -923,8 +1021,10 @@
       normalizeBranch,
       normalizeMergeRequest,
       normalizeProject,
+      readBranchDescriptions,
       readFavoriteProjects,
       resolvePreferredLanguage,
+      saveBranchDescriptions,
       saveFavoriteProjects,
       selectRecentForkProjects,
       selectRecentBranches,
@@ -932,6 +1032,7 @@
       shouldUseCachedUserscriptUpdate,
       toggleFavoriteProject,
       translate,
+      updateBranchDescription,
     };
     return;
   }
@@ -962,6 +1063,8 @@
   let searchDebounceTimer = null;
   let searchRequestController = null;
   let favoriteProjects = readFavoriteProjects(window.localStorage, window.location.origin);
+  let branchDescriptions = readBranchDescriptions(window.localStorage);
+  let editingBranchDescriptionKey = null;
   let activeView = VIEW_RECENT;
   let branchStatusProjects = [];
   let branchProjectsStatus = null;
@@ -1001,6 +1104,28 @@
     }
     favoriteProjects = nextFavoriteProjects;
     renderWidget();
+  }
+
+  function getBranchDescription(projectId, branchName) {
+    const key = branchDescriptionKey(projectId, branchName);
+    return branchDescriptions.find((item) => (
+      branchDescriptionKey(item.projectId, item.branchName) === key
+    ))?.description || '';
+  }
+
+  function persistBranchDescription(projectId, branchName, description) {
+    const nextDescriptions = updateBranchDescription(
+      branchDescriptions,
+      projectId,
+      branchName,
+      description,
+    );
+    if (!saveBranchDescriptions(window.localStorage, nextDescriptions)) {
+      window.alert(t('branchDescriptionStorageFailed'));
+      return false;
+    }
+    branchDescriptions = nextDescriptions;
+    return true;
   }
 
   function applyPublishedVersion(latestVersion) {
@@ -1496,6 +1621,13 @@
         ['path', { d: 'M18 6 6 18' }],
         ['path', { d: 'm6 6 12 12' }],
       ],
+      edit: [
+        ['path', { d: 'M12 20h9' }],
+        ['path', { d: 'M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z' }],
+      ],
+      check: [
+        ['path', { d: 'm5 12 4 4L19 6' }],
+      ],
       more: [
         ['circle', { cx: '5', cy: '12', r: '1' }],
         ['circle', { cx: '12', cy: '12', r: '1' }],
@@ -1738,16 +1870,96 @@
     return badge;
   }
 
+  function renderBranchDescriptionEditor(project, branch) {
+    const form = createElement('form', 'qgqr-branch-description-form');
+    const input = createElement('input', 'qgqr-branch-description-input');
+    input.type = 'text';
+    input.maxLength = MAX_BRANCH_DESCRIPTION_LENGTH;
+    input.value = getBranchDescription(project.id, branch.name);
+    input.placeholder = t('branchDescriptionPlaceholder');
+    input.setAttribute('aria-label', t('branchDescriptionInput', { branch: branch.name }));
+
+    const saveButton = createElement('button', 'qgqr-branch-description-action');
+    saveButton.type = 'submit';
+    saveButton.title = t('saveBranchDescription');
+    saveButton.setAttribute('aria-label', t('saveBranchDescription'));
+    saveButton.append(createIcon('check'));
+
+    const cancelButton = createElement('button', 'qgqr-branch-description-action');
+    cancelButton.type = 'button';
+    cancelButton.title = t('cancelBranchDescription');
+    cancelButton.setAttribute('aria-label', t('cancelBranchDescription'));
+    cancelButton.append(createIcon('close'));
+
+    const closeEditor = () => {
+      editingBranchDescriptionKey = null;
+      renderWidget();
+    };
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      if (!persistBranchDescription(project.id, branch.name, input.value)) return;
+      closeEditor();
+    });
+    form.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      event.stopPropagation();
+      closeEditor();
+    });
+    cancelButton.addEventListener('click', closeEditor);
+    form.append(input, saveButton, cancelButton);
+    return form;
+  }
+
   function renderBranchResult(project, branchResult) {
     const row = createElement('li', 'qgqr-branch-row');
     const branchInfo = createElement('div', 'qgqr-branch-info');
     const branchLink = createElement('a', 'qgqr-branch-link', branchResult.branch.name);
     branchLink.href = branchResult.branch.webUrl;
+    const description = getBranchDescription(project.id, branchResult.branch.name);
+    const branchTitle = createElement('div', 'qgqr-branch-title');
+    branchTitle.append(branchLink);
+    if (description) {
+      branchTitle.append(createElement(
+        'span',
+        'qgqr-branch-description',
+        `(${description})`,
+      ));
+    }
+
+    const descriptionLabel = t(
+      description ? 'editBranchDescription' : 'addBranchDescription',
+      { branch: branchResult.branch.name },
+    );
+    const editDescriptionButton = createElement('button', 'qgqr-branch-description-edit');
+    editDescriptionButton.type = 'button';
+    editDescriptionButton.title = descriptionLabel;
+    editDescriptionButton.setAttribute('aria-label', descriptionLabel);
+    editDescriptionButton.append(createIcon('edit'));
+    editDescriptionButton.addEventListener('click', () => {
+      editingBranchDescriptionKey = branchDescriptionKey(
+        project.id,
+        branchResult.branch.name,
+      );
+      renderWidget();
+      const editorInput = document.getElementById(WIDGET_ID)
+        ?.querySelector('.qgqr-branch-description-input');
+      editorInput?.focus();
+      editorInput?.select();
+    });
+    branchTitle.append(editDescriptionButton);
     branchInfo.append(
       createIcon('branch', 'qgqr-branch-row-icon'),
-      branchLink,
+      branchTitle,
     );
     row.append(branchInfo);
+
+    if (editingBranchDescriptionKey === branchDescriptionKey(
+      project.id,
+      branchResult.branch.name,
+    )) {
+      row.append(renderBranchDescriptionEditor(project, branchResult.branch));
+    }
 
     const branchMetadata = createElement('div', 'qgqr-branch-metadata');
     branchMetadata.append(createElement('span', 'qgqr-branch-date', t('branchUpdatedOn', {
@@ -2121,8 +2333,18 @@
       .qgqr-branch-row { display: grid; min-height: 54px; grid-template-columns: minmax(0, 1fr) 26px; align-items: start; column-gap: 7px; row-gap: 4px; border-top: 1px solid var(--gl-border-color-default, #e6e7eb); padding: 7px 0; }
       .qgqr-branch-info { display: flex; min-width: 0; align-items: center; gap: 6px; }
       .qgqr-branch-row-icon { width: 14px; height: 14px; flex: 0 0 14px; color: #7c6cf2; }
+      .qgqr-branch-title { display: flex; min-width: 0; align-items: center; flex-wrap: wrap; gap: 2px 5px; }
       .qgqr-branch-link { min-width: 0; color: var(--gl-text-color-link, #1f63b5); font: 600 11.5px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; text-decoration: none; }
       .qgqr-branch-link:hover { text-decoration: underline; }
+      .qgqr-branch-description { min-width: 0; color: var(--gl-text-color-subtle, #687386); font-size: 10.5px; line-height: 1.45; overflow-wrap: anywhere; }
+      .qgqr-branch-description-edit, .qgqr-branch-description-action { display: grid; width: 22px; height: 22px; flex: 0 0 22px; place-items: center; border: 0; border-radius: 6px; padding: 0; background: transparent; color: var(--gl-text-color-subtle, #7a8292); cursor: pointer; transition: color .18s ease, background-color .18s ease; }
+      .qgqr-branch-description-edit { opacity: .7; }
+      .qgqr-branch-description-edit:hover, .qgqr-branch-description-action:hover { background: var(--gl-background-color-subtle, #f4f2ff); color: #5943b6; opacity: 1; }
+      .qgqr-branch-description-edit .qgqr-icon, .qgqr-branch-description-action .qgqr-icon { width: 13px; height: 13px; }
+      .qgqr-branch-description-form { display: flex; min-width: 0; grid-column: 1 / -1; align-items: center; gap: 4px; padding-left: 20px; }
+      .qgqr-branch-description-input { min-width: 0; height: 28px; flex: 1; border: 1px solid var(--gl-border-color-default, #d8dbe2); border-radius: 7px; padding: 4px 8px; background: var(--gl-background-color-default, #fff); color: var(--gl-text-color-default, #172033); font: inherit; font-size: 11px; outline: 0; }
+      .qgqr-branch-description-input::placeholder { color: var(--gl-text-color-subtle, #8991a0); }
+      .qgqr-branch-description-input:focus { border-color: #7c6cf2; box-shadow: 0 0 0 2px rgba(124,108,242,.14); }
       .qgqr-branch-metadata { display: flex; min-width: 0; grid-column: 1 / -1; align-items: center; flex-wrap: wrap; gap: 4px 12px; padding-left: 20px; }
       .qgqr-branch-date { flex: 0 0 auto; color: var(--gl-text-color-subtle, #7a8292); font-size: 10px; }
       .qgqr-branch-badges { display: flex; margin-left: auto; flex-wrap: nowrap; gap: 10px; }
@@ -2163,7 +2385,7 @@
       .qgqr-detail, .qgqr-status { color: var(--gl-text-color-subtle, #626b7d); font-size: 11.5px; }
       .qgqr-mr-link { color: var(--gl-text-color-link, #1f75cb); text-decoration: none; }
       .qgqr-status { display: block; padding: 11px 16px; border-top: 1px solid var(--gl-border-color-default, #e6e7eb); background: var(--gl-background-color-subtle, #fafbfc); }
-      .qgqr-toggle:focus-visible, .qgqr-update-tag:focus-visible, .qgqr-home-button:focus-visible, .qgqr-action:focus-visible, .qgqr-project-link:focus-visible, .qgqr-mr-link:focus-visible, .qgqr-search-clear:focus-visible, .qgqr-favorite-button:focus-visible, .qgqr-more-button:focus-visible, .qgqr-menu-action:focus-visible, .qgqr-branch-mr:focus-visible, .qgqr-branch-link:focus-visible, .qgqr-branch-help:focus-visible, .qgqr-enable-origin:focus-visible, .qgqr-disable-origin:focus-visible, .qgqr-origin-input:focus-visible, .qgqr-language-select:focus-visible, .qgqr-update-action:focus-visible, .qgqr-repository-link:focus-visible { outline: 2px solid #7c6cf2; outline-offset: 2px; }
+      .qgqr-toggle:focus-visible, .qgqr-update-tag:focus-visible, .qgqr-home-button:focus-visible, .qgqr-action:focus-visible, .qgqr-project-link:focus-visible, .qgqr-mr-link:focus-visible, .qgqr-search-clear:focus-visible, .qgqr-favorite-button:focus-visible, .qgqr-more-button:focus-visible, .qgqr-menu-action:focus-visible, .qgqr-branch-mr:focus-visible, .qgqr-branch-link:focus-visible, .qgqr-branch-description-edit:focus-visible, .qgqr-branch-description-action:focus-visible, .qgqr-branch-help:focus-visible, .qgqr-enable-origin:focus-visible, .qgqr-disable-origin:focus-visible, .qgqr-origin-input:focus-visible, .qgqr-language-select:focus-visible, .qgqr-update-action:focus-visible, .qgqr-repository-link:focus-visible { outline: 2px solid #7c6cf2; outline-offset: 2px; }
       @keyframes qgqr-enter { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
       @keyframes qgqr-update-tag-enter { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }
       @keyframes qgqr-spin { to { transform: rotate(360deg); } }
@@ -2177,6 +2399,9 @@
         .qgqr-favorite-button:hover, .qgqr-favorite-button.qgqr-is-favorite { border-color: rgba(245,158,11,.45); background: rgba(180,83,9,.2); color: #fbbf24; }
         .qgqr-branch-mr { color: #93c5fd; }
         .qgqr-branch-mr:hover { background: rgba(37,99,235,.18); }
+        .qgqr-branch-description { color: #aeb4c0; }
+        .qgqr-branch-description-edit, .qgqr-branch-description-action { color: #9ca3af; }
+        .qgqr-branch-description-edit:hover, .qgqr-branch-description-action:hover { background: rgba(124,108,242,.18); color: #c4b5fd; }
         .qgqr-branch-badge-merged { color: #86efac; }
         .qgqr-branch-badge-unmerged { color: #fca5a5; }
         .qgqr-branch-badge-missing, .qgqr-branch-badge-unknown { color: #d1d5db; }
@@ -2444,6 +2669,7 @@
     homeButton.addEventListener('click', () => {
       const defaultNavigationState = getDefaultNavigationState();
       activeView = defaultNavigationState.activeView;
+      editingBranchDescriptionKey = null;
       settings.hidden = true;
       settingsButton.setAttribute('aria-expanded', 'false');
       searchInput.value = defaultNavigationState.searchQuery;
@@ -2453,6 +2679,7 @@
     languageSelect.addEventListener('change', () => setLanguage(languageSelect.value));
     refreshButton.addEventListener('click', async () => {
       if (activeView === VIEW_BRANCHES) {
+        editingBranchDescriptionKey = null;
         await loadBranchStatusView({ force: true });
       } else {
         await refreshData({ force: true });
@@ -2460,6 +2687,7 @@
     });
     branchesButton.addEventListener('click', async () => {
       activeView = activeView === VIEW_BRANCHES ? VIEW_RECENT : VIEW_BRANCHES;
+      editingBranchDescriptionKey = null;
       settings.hidden = true;
       settingsButton.setAttribute('aria-expanded', 'false');
       renderWidget();
@@ -2467,6 +2695,7 @@
     });
     favoritesButton.addEventListener('click', () => {
       activeView = activeView === VIEW_FAVORITES ? VIEW_RECENT : VIEW_FAVORITES;
+      editingBranchDescriptionKey = null;
       settings.hidden = true;
       settingsButton.setAttribute('aria-expanded', 'false');
       renderWidget();
