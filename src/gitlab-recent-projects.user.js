@@ -3,15 +3,15 @@
 // @namespace    https://github.com/lucaslushuo/userscripts
 // @version      __USERSCRIPT_VERSION__
 // @description  快速打开最近 MR 仓库、收藏项目，并检查 Fork 活跃分支是否已合入 Upstream。
-// @author       lucaslushuo
+// @author       lucaslus
 // @match        https://*/*
-// @updateURL    https://lucaslushuo.github.io/userscripts/gitlab-recent-projects.user.js
-// @downloadURL  https://lucaslushuo.github.io/userscripts/gitlab-recent-projects.user.js
-// @homepageURL  https://github.com/lucaslushuo/userscripts
-// @supportURL   https://github.com/lucaslushuo/userscripts/issues
+// @updateURL    https://lucaslus.github.io/userscripts/gitlab-recent-projects.user.js
+// @downloadURL  https://lucaslus.github.io/userscripts/gitlab-recent-projects.user.js
+// @homepageURL  https://github.com/lucaslus/userscripts
+// @supportURL   https://github.com/lucaslus/userscripts/issues
 // @grant        GM_info
 // @grant        GM_xmlhttpRequest
-// @connect      lucaslushuo.github.io
+// @connect      lucaslus.github.io
 // @run-at       document-idle
 // ==/UserScript==
 
@@ -36,8 +36,8 @@
   const CACHE_TTL_MS = 10 * 60 * 1000;
   const UPDATE_CHECK_INTERVAL_MS = 10 * 60 * 1000;
   const UPDATE_REQUEST_TIMEOUT_MS = 10 * 1000;
-  const PUBLISHED_SCRIPT_URL = 'https://lucaslushuo.github.io/userscripts/gitlab-recent-projects.user.js';
-  const REPOSITORY_URL = 'https://github.com/lucaslushuo/userscripts';
+  const PUBLISHED_SCRIPT_URL = 'https://lucaslus.github.io/userscripts/gitlab-recent-projects.user.js';
+  const REPOSITORY_URL = 'https://github.com/lucaslus/userscripts';
   const CACHE_STORAGE_KEY = 'gitlab-recent-mr-repos:cache:v3';
   const LANGUAGE_STORAGE_KEY = 'gitlab-recent-mr-repos:language:v1';
   const ENABLED_ORIGIN_STORAGE_KEY = 'gitlab-recent-mr-repos:enabled-origin:v1';

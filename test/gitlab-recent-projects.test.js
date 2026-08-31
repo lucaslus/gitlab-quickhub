@@ -1,6 +1,8 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const { readFileSync } = require('node:fs');
+const path = require('node:path');
 const test = require('node:test');
 const {
   buildRecentMrGroups,
@@ -46,6 +48,29 @@ const {
 } = require('../src/gitlab-recent-projects.user.js');
 
 const ORIGIN = 'https://git.example.com';
+const USERSCRIPT_SOURCE = readFileSync(
+  path.join(__dirname, '../src/gitlab-recent-projects.user.js'),
+  'utf8',
+);
+
+test('public userscript URLs use the current GitHub account', () => {
+  const publishedUrl = 'https://lucaslus.github.io/userscripts/gitlab-recent-projects.user.js';
+
+  assert.match(USERSCRIPT_SOURCE, new RegExp(`^// @updateURL\\s+${publishedUrl}$`, 'm'));
+  assert.match(USERSCRIPT_SOURCE, new RegExp(`^// @downloadURL\\s+${publishedUrl}$`, 'm'));
+  assert.match(USERSCRIPT_SOURCE, /^\/\/ @homepageURL\s+https:\/\/github\.com\/lucaslus\/userscripts$/m);
+  assert.match(USERSCRIPT_SOURCE, /^\/\/ @supportURL\s+https:\/\/github\.com\/lucaslus\/userscripts\/issues$/m);
+  assert.match(USERSCRIPT_SOURCE, /^\/\/ @connect\s+lucaslus\.github\.io$/m);
+  assert.match(USERSCRIPT_SOURCE, new RegExp(`PUBLISHED_SCRIPT_URL = '${publishedUrl}'`));
+  assert.match(USERSCRIPT_SOURCE, /REPOSITORY_URL = 'https:\/\/github\.com\/lucaslus\/userscripts'/);
+
+  const legacyAccountLines = USERSCRIPT_SOURCE
+    .split('\n')
+    .filter((line) => line.includes('lucaslushuo'));
+  assert.deepEqual(legacyAccountLines, [
+    '// @namespace    https://github.com/lucaslushuo/userscripts',
+  ]);
+});
 
 function documentWithMetadata(metadata = {}) {
   return {

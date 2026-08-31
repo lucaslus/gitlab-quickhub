@@ -6,7 +6,7 @@
 
 面板左上角使用 Node G 作为 gitcube 的 Home 图标。点击图标会关闭设置、退出收藏夹或分支状态、清空搜索，并回到默认的最近 MR 首页。
 
-- 安装地址：<https://lucaslushuo.github.io/userscripts/gitlab-recent-projects.user.js>
+- 安装地址：<https://lucaslus.github.io/userscripts/gitlab-recent-projects.user.js>
 - 源码：[src/gitlab-recent-projects.user.js](src/gitlab-recent-projects.user.js)
 - 测试：[test/gitlab-recent-projects.test.js](test/gitlab-recent-projects.test.js)
 - 当前版本：以 [package.json](package.json) 中的 `version` 为准
@@ -102,12 +102,16 @@ GitLab 的项目活跃度不能准确代表“我最近使用过哪些项目”�
 ## 安装与更新
 
 1. 安装并启用 Tampermonkey 或兼容的 userscript 管理器。
-2. 打开[脚本安装地址](https://lucaslushuo.github.io/userscripts/gitlab-recent-projects.user.js)。
+2. 打开[脚本安装地址](https://lucaslus.github.io/userscripts/gitlab-recent-projects.user.js)。
 3. 在 userscript 管理器的安装页面确认安装。
 4. 打开公司的 HTTPS GitLab 页面。
 5. 完成下方“首次启用”步骤。
 
 脚本通过 metadata 中的 `@updateURL` 和 `@downloadURL` 获取更新。发布新版本时必须提升 [package.json](package.json) 的 `version`，否则 userscript 管理器不会将其识别为新版本。
+
+metadata 中的 `@namespace` 保留历史值，以维持已安装脚本的稳定身份；它不会用于网络请求。安装、更新、源码和 Issue 链接均使用当前的 `lucaslus` 地址。
+
+如果已安装的版本仍指向旧 GitHub Pages 地址，自动更新无法从已失效的地址自行迁移。请手动打开上方新安装地址并确认更新一次；之后会继续通过新地址自动更新。
 
 如需手动更新，可在 Tampermonkey 管理面板中执行“检查用户脚本更新”，或重新打开安装地址。
 
@@ -177,7 +181,7 @@ userscript 管理器必须在脚本安装时确定允许脚本加载的网站。
 
 - `GM_info` 仅用于读取当前安装版本。
 - `GM_xmlhttpRequest` 仅用于匿名读取固定 GitHub Pages 安装地址的已发布脚本。
-- `@connect` 仅允许 `lucaslushuo.github.io`。
+- `@connect` 仅允许 `lucaslus.github.io`。
 - 不保存或要求用户填写 Personal Access Token。
 - GitLab 业务 API 请求全部使用相对路径，并携带当前 GitLab 登录会话的同源凭据。
 - 从 API 返回的项目、MR 和分支 URL 必须与当前页面同源，否则会被丢弃。
