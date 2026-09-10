@@ -1,4 +1,4 @@
-# GitLab Recent Projects Agent Guide
+# GitLab QuickHub Agent Guide
 
 本文件适用于本仓库下的全部修改。用户要求优先于本文件。
 
@@ -8,8 +8,8 @@
 
 1. `README.md`：用户行为、API、隐私、构建和发布说明。
 2. `package.json`：脚本版本和构建声明。
-3. `src/gitlab-recent-projects.user.js`：实际实现。
-4. `test/gitlab-recent-projects.test.js`：已有行为契约。
+3. `src/gitlab-quickhub.user.js`：实际实现。
+4. `test/gitlab-quickhub.test.js`：已有行为契约。
 
 ## 关键不变量
 
@@ -31,7 +31,7 @@
 - 发布版本只修改 `package.json#version`。
 - 源码 metadata 必须保留唯一的 `__USERSCRIPT_VERSION__`。
 - 不要直接编辑或提交 `dist/`。
-- 新增或修改核心行为时，在 `test/gitlab-recent-projects.test.js` 添加行为级测试。
+- 新增或修改核心行为时，在 `test/gitlab-quickhub.test.js` 添加行为级测试。
 - 修改 API contract 时同步更新 `README.md` 的 API 和注意事项。
 - 修改 UI 文案时同步维护中文、英文翻译。
 - 修改本地存储结构时使用新版本 Key，并说明迁移或失效影响。
@@ -49,7 +49,7 @@ npm run build
 
 构建后确认：
 
-- `dist/gitlab-recent-projects.user.js` 的 `@version` 与 package 版本一致。
+- `dist/gitlab-quickhub.user.js` 的 `@version` 与 package 版本一致。
 - 构建产物不存在 `__USERSCRIPT_VERSION__`。
 - 仓库和产物不存在组织专属词汇或域名。
 - UI/CSS 变更已在 GitLab 宿主页或等效样式污染场景中验证。

@@ -1,4 +1,4 @@
-# GitLab 最近 MR 仓库快捷入口
+# GitLab QuickHub (GitLab 最近 MR 与仓库快捷入口)
 
 一个适用于 HTTPS GitLab 实例的 userscript。它根据当前用户最近创建的 Merge Request（MR）整理常用项目，并将个人 Fork 与对应 Upstream 放在同一组中，同时提供全局项目搜索、收藏夹、活跃分支合入状态和常用项目操作入口。
 
@@ -6,9 +6,9 @@
 
 面板左上角使用 Node G 作为 gitcube 的 Home 图标。点击图标会关闭设置、退出收藏夹或分支状态、清空搜索，并回到默认的最近 MR 首页。
 
-- 安装地址：<https://lucaslus.github.io/gitlab-recent-projects/gitlab-recent-projects.user.js>
-- 源码：[src/gitlab-recent-projects.user.js](src/gitlab-recent-projects.user.js)
-- 测试：[test/gitlab-recent-projects.test.js](test/gitlab-recent-projects.test.js)
+- 安装地址：<https://lucaslus.github.io/gitlab-quickhub/gitlab-quickhub.user.js>
+- 源码：[src/gitlab-quickhub.user.js](src/gitlab-quickhub.user.js)
+- 测试：[test/gitlab-quickhub.test.js](test/gitlab-quickhub.test.js)
 - 当前版本：以 [package.json](package.json) 中的 `version` 为准
 
 ## 解决什么问题
@@ -102,7 +102,7 @@ GitLab 的项目活跃度不能准确代表“我最近使用过哪些项目”�
 ## 安装与更新
 
 1. 安装并启用 Tampermonkey 或兼容的 userscript 管理器。
-2. 打开[脚本安装地址](https://lucaslus.github.io/gitlab-recent-projects/gitlab-recent-projects.user.js)。
+2. 打开[脚本安装地址](https://lucaslus.github.io/gitlab-quickhub/gitlab-quickhub.user.js)。
 3. 在 userscript 管理器的安装页面确认安装。
 4. 打开公司的 HTTPS GitLab 页面。
 5. 完成下方“首次启用”步骤。
@@ -300,9 +300,9 @@ npm install
 │   ├── build.mjs                 # 构建 userscript 与安装页
 │   └── build.test.mjs            # 构建脚本单元测试
 ├── src/
-│   └── gitlab-recent-projects.user.js
+│   └── gitlab-quickhub.user.js
 ├── test/
-│   └── gitlab-recent-projects.test.js
+│   └── gitlab-quickhub.test.js
 ├── AGENTS.md
 ├── README.md
 ├── package.json
@@ -322,7 +322,7 @@ npm run build    # 构建 userscript 产物
 查看本地构建产物：
 
 ```text
-dist/gitlab-recent-projects.user.js
+dist/gitlab-quickhub.user.js
 ```
 
 ### 构建机制
@@ -368,7 +368,7 @@ dist/gitlab-recent-projects.user.js
    - Minor：向后兼容的新功能，例如 `3.2.0 → 3.3.0`。
    - Major：不兼容行为或安装身份变化，例如 `3.2.0 → 4.0.0`。
 3. 运行 `npm run check`、`npm test` 和 `npm run build`。
-4. 确认 `dist/gitlab-recent-projects.user.js` 中没有版本占位符，且 `@version` 正确。
+4. 确认 `dist/gitlab-quickhub.user.js` 中没有版本占位符，且 `@version` 正确。
 5. 提交 Pull Request 并合并到 `main`。
 6. GitHub Actions 自动构建并部署 `dist/` 到 GitHub Pages。
 7. userscript 管理器通过固定更新地址发现更高版本。
