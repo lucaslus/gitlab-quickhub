@@ -1,6 +1,6 @@
 # GitLab Recent Projects Agent Guide
 
-本文件适用于 `packages/gitlab-recent-projects/` 下的全部修改。用户要求优先于本文件。
+本文件适用于本仓库下的全部修改。用户要求优先于本文件。
 
 ## 先读内容
 
@@ -45,13 +45,6 @@
 npm run check
 npm test
 npm run build
-```
-
-只验证本 package：
-
-```bash
-npm run check --workspace @userscripts/gitlab-recent-projects
-npm test --workspace @userscripts/gitlab-recent-projects
 ```
 
 构建后确认：

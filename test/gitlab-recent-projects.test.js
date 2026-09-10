@@ -54,15 +54,15 @@ const USERSCRIPT_SOURCE = readFileSync(
 );
 
 test('public userscript URLs use the current GitHub account', () => {
-  const publishedUrl = 'https://lucaslus.github.io/userscripts/gitlab-recent-projects.user.js';
+  const publishedUrl = 'https://lucaslus.github.io/gitlab-recent-projects/gitlab-recent-projects.user.js';
 
   assert.match(USERSCRIPT_SOURCE, new RegExp(`^// @updateURL\\s+${publishedUrl}$`, 'm'));
   assert.match(USERSCRIPT_SOURCE, new RegExp(`^// @downloadURL\\s+${publishedUrl}$`, 'm'));
-  assert.match(USERSCRIPT_SOURCE, /^\/\/ @homepageURL\s+https:\/\/github\.com\/lucaslus\/userscripts$/m);
-  assert.match(USERSCRIPT_SOURCE, /^\/\/ @supportURL\s+https:\/\/github\.com\/lucaslus\/userscripts\/issues$/m);
+  assert.match(USERSCRIPT_SOURCE, /^\/\/ @homepageURL\s+https:\/\/github\.com\/lucaslus\/gitlab-recent-projects$/m);
+  assert.match(USERSCRIPT_SOURCE, /^\/\/ @supportURL\s+https:\/\/github\.com\/lucaslus\/gitlab-recent-projects\/issues$/m);
   assert.match(USERSCRIPT_SOURCE, /^\/\/ @connect\s+lucaslus\.github\.io$/m);
   assert.match(USERSCRIPT_SOURCE, new RegExp(`PUBLISHED_SCRIPT_URL = '${publishedUrl}'`));
-  assert.match(USERSCRIPT_SOURCE, /REPOSITORY_URL = 'https:\/\/github\.com\/lucaslus\/userscripts'/);
+  assert.match(USERSCRIPT_SOURCE, /REPOSITORY_URL = 'https:\/\/github\.com\/lucaslus\/gitlab-recent-projects'/);
 
   const legacyAccountLines = USERSCRIPT_SOURCE
     .split('\n')

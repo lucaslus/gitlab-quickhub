@@ -6,7 +6,7 @@
 
 面板左上角使用 Node G 作为 gitcube 的 Home 图标。点击图标会关闭设置、退出收藏夹或分支状态、清空搜索，并回到默认的最近 MR 首页。
 
-- 安装地址：<https://lucaslus.github.io/userscripts/gitlab-recent-projects.user.js>
+- 安装地址：<https://lucaslus.github.io/gitlab-recent-projects/gitlab-recent-projects.user.js>
 - 源码：[src/gitlab-recent-projects.user.js](src/gitlab-recent-projects.user.js)
 - 测试：[test/gitlab-recent-projects.test.js](test/gitlab-recent-projects.test.js)
 - 当前版本：以 [package.json](package.json) 中的 `version` 为准
@@ -102,7 +102,7 @@ GitLab 的项目活跃度不能准确代表“我最近使用过哪些项目”�
 ## 安装与更新
 
 1. 安装并启用 Tampermonkey 或兼容的 userscript 管理器。
-2. 打开[脚本安装地址](https://lucaslus.github.io/userscripts/gitlab-recent-projects.user.js)。
+2. 打开[脚本安装地址](https://lucaslus.github.io/gitlab-recent-projects/gitlab-recent-projects.user.js)。
 3. 在 userscript 管理器的安装页面确认安装。
 4. 打开公司的 HTTPS GitLab 页面。
 5. 完成下方“首次启用”步骤。
@@ -295,40 +295,28 @@ npm install
 ### 文件结构
 
 ```text
-packages/gitlab-recent-projects/
+├── .github/workflows/publish.yml # 检查、测试、构建和 Pages 发布
+├── scripts/
+│   ├── build.mjs                 # 构建 userscript 与安装页
+│   └── build.test.mjs            # 构建脚本单元测试
+├── src/
+│   └── gitlab-recent-projects.user.js
+├── test/
+│   └── gitlab-recent-projects.test.js
 ├── AGENTS.md
 ├── README.md
 ├── package.json
-├── src/
-│   └── gitlab-recent-projects.user.js
-└── test/
-    └── gitlab-recent-projects.test.js
-```
-
-相关 monorepo 文件：
-
-```text
-scripts/build-userscripts.mjs       # 构建所有 userscript
-scripts/build-userscripts.test.mjs  # 构建器测试
-.github/workflows/publish.yml       # 检查、测试、构建和 Pages 发布
-dist/                               # 本地生成，不提交 Git
+└── dist/                         # 本地构建产物，不提交 Git
 ```
 
 ### 开发命令
 
-在仓库根目录运行全部检查：
+在仓库根目录运行：
 
 ```bash
-npm run check
-npm test
-npm run build
-```
-
-只检查或测试当前脚本：
-
-```bash
-npm run check --workspace @userscripts/gitlab-recent-projects
-npm test --workspace @userscripts/gitlab-recent-projects
+npm run check    # 语法检查
+npm test         # 运行全部测试
+npm run build    # 构建 userscript 产物
 ```
 
 查看本地构建产物：
@@ -415,6 +403,6 @@ dist/gitlab-recent-projects.user.js
 | UI 渲染 | `createWidget`、`renderWidget`、`createOriginSetup` |
 | 样式和图标 | `addStyles`、`createIcon` |
 | 更新检查 | `checkForUserscriptUpdates`、`requestPublishedUserscript`、`compareUserscriptVersions` |
-| 构建版本 | package `version`、根目录 `scripts/build-userscripts.mjs` |
+| 构建版本 | `package.json` 中的 `version`、`scripts/build.mjs` |
 
 AI 或维护者完成改动前，应核对源码、测试、版本号和本文档是否同步，并执行与风险相称的验证。

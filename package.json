@@ -1,15 +1,18 @@
 {
-  "name": "@userscripts/gitlab-recent-projects",
-  "private": true,
+  "name": "gitlab-recent-projects",
   "version": "3.16.1",
   "description": "Quick access to recent GitLab MR repositories, favorites, search, and branch merge status.",
   "scripts": {
-    "check": "node --check src/gitlab-recent-projects.user.js",
-    "test": "node --test test/*.test.js"
+    "check": "node --check src/gitlab-recent-projects.user.js && node --check scripts/build.mjs",
+    "test": "node --test test/*.test.js && node --test scripts/*.test.mjs",
+    "build": "node scripts/build.mjs"
   },
   "userscript": {
     "source": "src/gitlab-recent-projects.user.js",
     "output": "gitlab-recent-projects.user.js",
     "title": "GitLab 最近 MR 仓库快捷入口"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }

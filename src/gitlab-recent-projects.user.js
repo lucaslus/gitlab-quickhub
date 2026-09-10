@@ -5,10 +5,10 @@
 // @description  快速打开最近 MR 仓库、收藏项目，并检查 Fork 活跃分支是否已合入 Upstream。
 // @author       lucaslus
 // @match        https://*/*
-// @updateURL    https://lucaslus.github.io/userscripts/gitlab-recent-projects.user.js
-// @downloadURL  https://lucaslus.github.io/userscripts/gitlab-recent-projects.user.js
-// @homepageURL  https://github.com/lucaslus/userscripts
-// @supportURL   https://github.com/lucaslus/userscripts/issues
+// @updateURL    https://lucaslus.github.io/gitlab-recent-projects/gitlab-recent-projects.user.js
+// @downloadURL  https://lucaslus.github.io/gitlab-recent-projects/gitlab-recent-projects.user.js
+// @homepageURL  https://github.com/lucaslus/gitlab-recent-projects
+// @supportURL   https://github.com/lucaslus/gitlab-recent-projects/issues
 // @grant        GM_info
 // @grant        GM_xmlhttpRequest
 // @connect      lucaslus.github.io
@@ -36,8 +36,8 @@
   const CACHE_TTL_MS = 10 * 60 * 1000;
   const UPDATE_CHECK_INTERVAL_MS = 10 * 60 * 1000;
   const UPDATE_REQUEST_TIMEOUT_MS = 10 * 1000;
-  const PUBLISHED_SCRIPT_URL = 'https://lucaslus.github.io/userscripts/gitlab-recent-projects.user.js';
-  const REPOSITORY_URL = 'https://github.com/lucaslus/userscripts';
+  const PUBLISHED_SCRIPT_URL = 'https://lucaslus.github.io/gitlab-recent-projects/gitlab-recent-projects.user.js';
+  const REPOSITORY_URL = 'https://github.com/lucaslus/gitlab-recent-projects';
   const CACHE_STORAGE_KEY = 'gitlab-recent-mr-repos:cache:v3';
   const LANGUAGE_STORAGE_KEY = 'gitlab-recent-mr-repos:language:v1';
   const ENABLED_ORIGIN_STORAGE_KEY = 'gitlab-recent-mr-repos:enabled-origin:v1';
