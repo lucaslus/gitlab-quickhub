@@ -5,6 +5,8 @@ const { readFileSync } = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
 const {
+  appendOpenMergeRequests,
+  buildOpenMergeRequestsPath,
   buildRecentMrGroups,
   buildGlobalSearchFallbackPath,
   buildMyMergeRequestsUrl,
@@ -23,6 +25,7 @@ const {
   disableOrigin,
   enableOrigin,
   extractPublishedUserscriptVersion,
+  fetchOpenMergeRequestsPage,
   getCrossProjectBranchMergeStatus,
   getDefaultNavigationState,
   getOriginConfigurationError,
@@ -32,6 +35,7 @@ const {
   normalizeHttpsOrigin,
   normalizeBranch,
   normalizeMergeRequest,
+  normalizeOpenMergeRequest,
   normalizeProject,
   readBranchDescriptions,
   readFavoriteProjects,
@@ -312,6 +316,128 @@ test('rejects external merge request URLs', () => {
   }, ORIGIN);
 
   assert.equal(normalized, null);
+});
+
+function openMergeRequestPayload(id = 101, overrides = {}) {
+  return {
+    id,
+    iid: id,
+    source_project_id: 2,
+    target_project_id: 1,
+    created_at: '2026-09-15T01:00:00Z',
+    web_url: `${ORIGIN}/team/app/-/merge_requests/${id}`,
+    title: 'Draft: Add MR shortcuts',
+    state: 'opened',
+    source_branch: 'feature/mr-shortcuts',
+    target_branch: 'main',
+    ...overrides,
+  };
+}
+
+test('open MR query filters by creator and opened state, without recent-project limits', () => {
+  const requestPath = buildOpenMergeRequestsPath(6);
+  assert.ok(requestPath.startsWith('/api/v4/merge_requests?'));
+  const url = new URL(requestPath, ORIGIN);
+  assert.deepEqual(Object.fromEntries(url.searchParams), {
+    scope: 'created_by_me',
+    state: 'opened',
+    order_by: 'created_at',
+    sort: 'desc',
+    per_page: '50',
+    page: '6',
+  });
+});
+
+test('open MR normalization retains title, branch information, draft MRs, and deleted sources', () => {
+  const value = normalizeOpenMergeRequest(openMergeRequestPayload(101, {
+    source_project_id: null,
+  }), ORIGIN);
+  assert.equal(value.title, 'Draft: Add MR shortcuts');
+  assert.equal(value.sourceBranch, 'feature/mr-shortcuts');
+  assert.equal(value.targetBranch, 'main');
+  assert.equal(value.sourceProjectId, null);
+  assert.equal(value.targetProject.pathWithNamespace, 'team/app');
+  assert.equal(value.webUrl, `${ORIGIN}/team/app/-/merge_requests/101`);
+  for (const state of ['merged', 'closed', 'locked', undefined]) {
+    assert.equal(normalizeOpenMergeRequest(openMergeRequestPayload(101, { state }), ORIGIN), null);
+  }
+  assert.equal(normalizeOpenMergeRequest(openMergeRequestPayload(101, {
+    web_url: 'https://attacker.example/team/app/-/merge_requests/101',
+  }), ORIGIN), null);
+});
+
+test('open MR pagination continues beyond 20 projects and uses raw page size after filtering', async () => {
+  const payload = Array.from({ length: 50 }, (_, index) => openMergeRequestPayload(index + 1, {
+    target_project_id: index + 1,
+    state: index === 0 ? 'merged' : 'opened',
+    web_url: `${ORIGIN}/team/project-${index + 1}/-/merge_requests/${index + 1}`,
+  }));
+  const result = await fetchOpenMergeRequestsPage(async (path) => {
+    assert.equal(new URL(path, ORIGIN).searchParams.get('page'), '1');
+    return payload;
+  }, ORIGIN);
+  assert.equal(result.items.length, 49);
+  assert.equal(result.hasMore, true);
+  const next = await fetchOpenMergeRequestsPage(async (path) => {
+    assert.equal(new URL(path, ORIGIN).searchParams.get('page'), '2');
+    return [openMergeRequestPayload(51, { created_at: '2025-01-01T00:00:00Z' })];
+  }, ORIGIN, 2);
+  assert.equal(next.items[0].id, 51);
+  assert.equal(next.hasMore, false);
+  assert.deepEqual(await fetchOpenMergeRequestsPage(async () => [], ORIGIN), {
+    items: [], hasMore: false,
+  });
+});
+
+test('open MR pagination propagates request errors and rejects malformed or unsafe responses', async () => {
+  const failure = new Error('Request failed');
+  await assert.rejects(fetchOpenMergeRequestsPage(async () => { throw failure; }, ORIGIN), failure);
+  for (const payload of [{}, [null], [openMergeRequestPayload(101, { title: '' })], [
+    openMergeRequestPayload(101, { web_url: 'https://attacker.example/team/app/-/merge_requests/101' }),
+  ]]) {
+    await assert.rejects(fetchOpenMergeRequestsPage(async () => payload, ORIGIN), {
+      translationKey: 'apiShapeInvalid',
+    });
+  }
+});
+
+test('open MR pages deduplicate by global ID and remain sorted by creation time', () => {
+  const older = normalizeOpenMergeRequest(openMergeRequestPayload(101, {
+    created_at: '2025-01-01T00:00:00Z',
+  }), ORIGIN);
+  const newer = normalizeOpenMergeRequest(openMergeRequestPayload(102), ORIGIN);
+  const anotherProject = normalizeOpenMergeRequest(openMergeRequestPayload(103, {
+    iid: 101,
+    target_project_id: 3,
+    web_url: `${ORIGIN}/team/other/-/merge_requests/101`,
+  }), ORIGIN);
+  const combined = appendOpenMergeRequests([older, newer], [
+    { ...older, title: 'Updated title' }, anotherProject,
+  ]);
+  assert.deepEqual(combined.map(({ id }) => id), [103, 102, 101]);
+  assert.equal(combined[2].title, 'Updated title');
+  assert.equal(older.title, 'Draft: Add MR shortcuts');
+});
+
+test('copies an MR detail URL and exposes localized actions and feedback', async () => {
+  const mr = normalizeOpenMergeRequest(openMergeRequestPayload(), ORIGIN);
+  let copied;
+  assert.equal(await copyTextToClipboard(mr.webUrl, {
+    async writeText(value) { copied = value; },
+  }), true);
+  assert.equal(copied, `${ORIGIN}/team/app/-/merge_requests/101`);
+  for (const language of ['zh-CN', 'en']) {
+    for (const key of [
+      'openMyOpenMergeRequests', 'openMergeRequestsSubtitle', 'loadingOpenMergeRequests',
+      'noOpenMergeRequests', 'openMergeRequestsFailed', 'refreshOpenMergeRequests',
+      'loadMoreOpenMergeRequests', 'loadingMoreOpenMergeRequests', 'openMergeRequest',
+      'copyMergeRequestUrl', 'mergeRequestUrlCopied', 'mergeRequestCreatedOn',
+    ]) {
+      const value = translate(language, key, { count: 7, date: '2026-09-15' });
+      assert.notEqual(value, key);
+      assert.doesNotMatch(value, /\{(count|date)\}/);
+    }
+  }
 });
 
 test('ranks repositories by my latest MR creation time and groups fork with upstream', () => {

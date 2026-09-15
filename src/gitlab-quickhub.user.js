@@ -21,6 +21,7 @@
   const MAX_GROUPS = 20;
   const MAX_MERGE_REQUESTS = 100;
   const MAX_MERGE_REQUEST_PAGES = 5;
+  const OPEN_MERGE_REQUESTS_PER_PAGE = 50;
   const MAX_PROJECTS_PER_QUERY = 100;
   const MAX_SEARCH_PROJECTS_PER_QUERY = 20;
   const MAX_SEARCH_GROUPS = 20;
@@ -51,6 +52,7 @@
   const VIEW_RECENT = 'recent';
   const VIEW_FAVORITES = 'favorites';
   const VIEW_BRANCHES = 'branches';
+  const VIEW_OPEN_MRS = 'open-mrs';
   const SUPPORTED_LANGUAGES = new Set([LANGUAGE_ZH_CN, LANGUAGE_EN]);
   const GITLAB_META_SELECTORS = [
     'meta[name="application-name"]',
@@ -61,7 +63,7 @@
   const TRANSLATIONS = {
     [LANGUAGE_ZH_CN]: {
       toggleLabel: '最近 MR 仓库',
-      panelAriaLabel: 'GitLab 最近 MR 仓库、收藏夹、分支状态和仓库搜索',
+      panelAriaLabel: 'GitLab 最近 MR 仓库、我 Open 的 MR、收藏夹、分支状态和仓库搜索',
       appTitle: 'gitcube',
       goHome: '返回最近 MR 首页',
       recentSubtitle: '按 MR 创建时间排列 · 最多 20 组',
@@ -70,6 +72,18 @@
       favoritesSubtitle: '已收藏 {count} 个仓库',
       openFavorites: '打开收藏夹',
       showRecentProjects: '返回最近 MR 仓库',
+      openMyOpenMergeRequests: '我 Open 的 MR',
+      openMergeRequestsSubtitle: '我 Open 的 MR · 已加载 {count} 个 · 按创建时间排序',
+      loadingOpenMergeRequests: '正在读取我创建且处于 Opened 状态的 MR…',
+      noOpenMergeRequests: '没有找到你创建且处于 Opened 状态的 MR。',
+      openMergeRequestsFailed: 'MR 读取失败，请确认已登录 GitLab 后重试。',
+      refreshOpenMergeRequests: '刷新我 Open 的 MR',
+      loadMoreOpenMergeRequests: '加载更多 MR',
+      loadingMoreOpenMergeRequests: '正在加载更多 MR…',
+      openMergeRequest: '打开 MR',
+      copyMergeRequestUrl: '复制链接',
+      mergeRequestUrlCopied: '已复制链接',
+      mergeRequestCreatedOn: '创建于 {date}',
       branchesSubtitle: '最近 10 个 Fork · 每仓库最多 5 个分支 · 自动检查',
       openBranches: '打开分支状态',
       loadingBranchProjects: '正在读取最近活跃的 Fork…',
@@ -170,7 +184,7 @@
     },
     [LANGUAGE_EN]: {
       toggleLabel: 'Recent MR repos',
-      panelAriaLabel: 'GitLab recent MR repositories, favorites, branch status, and repository search',
+      panelAriaLabel: 'GitLab recent MR repositories, my open MRs, favorites, branch status, and repository search',
       appTitle: 'gitcube',
       goHome: 'Back to recent MR repositories',
       recentSubtitle: 'Sorted by MR creation time · Up to 20 groups',
@@ -179,6 +193,18 @@
       favoritesSubtitle: '{count} saved repositories',
       openFavorites: 'Open favorites',
       showRecentProjects: 'Back to recent MR repositories',
+      openMyOpenMergeRequests: 'My open MRs',
+      openMergeRequestsSubtitle: 'My open MRs · {count} loaded · Newest first',
+      loadingOpenMergeRequests: 'Loading MRs created by me in the Opened state…',
+      noOpenMergeRequests: 'No open merge requests created by you were found.',
+      openMergeRequestsFailed: 'Could not load MRs. Make sure you are signed in to GitLab and try again.',
+      refreshOpenMergeRequests: 'Refresh my open MRs',
+      loadMoreOpenMergeRequests: 'Load more MRs',
+      loadingMoreOpenMergeRequests: 'Loading more MRs…',
+      openMergeRequest: 'Open MR',
+      copyMergeRequestUrl: 'Copy link',
+      mergeRequestUrlCopied: 'Link copied',
+      mergeRequestCreatedOn: 'Created on {date}',
       branchesSubtitle: '10 recent forks · Up to 5 branches each · Auto-check',
       openBranches: 'Open branch status',
       loadingBranchProjects: 'Loading recently active forks…',
@@ -577,7 +603,7 @@
     if (!isRecord(value)
       || !Number.isInteger(value.id)
       || !Number.isInteger(value.iid)
-      || !Number.isInteger(value.source_project_id)
+      || (value.source_project_id !== null && !Number.isInteger(value.source_project_id))
       || !Number.isInteger(value.target_project_id)) {
       return null;
     }
@@ -596,6 +622,48 @@
       webUrl,
       targetProject,
     };
+  }
+
+  function normalizeOpenMergeRequest(value, allowedOrigin) {
+    if (!isRecord(value) || value.state !== 'opened') return null;
+    const mergeRequest = normalizeMergeRequest(value, allowedOrigin);
+    if (!mergeRequest || typeof value.title !== 'string' || !value.title.trim()) return null;
+    return {
+      ...mergeRequest,
+      title: value.title.trim(),
+      sourceBranch: typeof value.source_branch === 'string' ? value.source_branch : '',
+      targetBranch: typeof value.target_branch === 'string' ? value.target_branch : '',
+    };
+  }
+
+  function buildOpenMergeRequestsPath(page = 1) {
+    return `/api/v4/merge_requests?${new URLSearchParams({
+      scope: 'created_by_me',
+      state: 'opened',
+      order_by: 'created_at',
+      sort: 'desc',
+      per_page: String(OPEN_MERGE_REQUESTS_PER_PAGE),
+      page: String(page),
+    })}`;
+  }
+
+  async function fetchOpenMergeRequestsPage(fetchPage, allowedOrigin, page = 1) {
+    const payload = await fetchPage(buildOpenMergeRequestsPath(page));
+    if (!Array.isArray(payload)) throw new LocalizedError('apiShapeInvalid');
+    const items = [];
+    for (const value of payload) {
+      if (isRecord(value) && ['closed', 'merged', 'locked'].includes(value.state)) continue;
+      const mergeRequest = normalizeOpenMergeRequest(value, allowedOrigin);
+      if (!mergeRequest) throw new LocalizedError('apiShapeInvalid');
+      items.push(mergeRequest);
+    }
+    // Use the raw page size, since filtering must not hide subsequent pages.
+    return { items, hasMore: payload.length === OPEN_MERGE_REQUESTS_PER_PAGE };
+  }
+
+  function appendOpenMergeRequests(existing, incoming) {
+    return [...new Map([...existing, ...incoming].map((item) => [item.id, item])).values()]
+      .sort((left, right) => right.createdAt - left.createdAt || right.id - left.id);
   }
 
   function normalizeBranch(value, allowedOrigin) {
@@ -992,6 +1060,8 @@
 
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
+      appendOpenMergeRequests,
+      buildOpenMergeRequestsPath,
       buildRecentMrGroups,
       buildGlobalSearchFallbackPath,
       buildMyMergeRequestsUrl,
@@ -1010,6 +1080,7 @@
       disableOrigin,
       enableOrigin,
       extractPublishedUserscriptVersion,
+      fetchOpenMergeRequestsPage,
       getCrossProjectBranchMergeStatus,
       getDefaultNavigationState,
       getUpdateActionState,
@@ -1020,6 +1091,7 @@
       normalizeHttpsOrigin,
       normalizeBranch,
       normalizeMergeRequest,
+      normalizeOpenMergeRequest,
       normalizeProject,
       readBranchDescriptions,
       readFavoriteProjects,
@@ -1066,6 +1138,11 @@
   let branchDescriptions = readBranchDescriptions(window.localStorage);
   let editingBranchDescriptionKey = null;
   let activeView = VIEW_RECENT;
+  let openMergeRequests = [];
+  let openMergeRequestsStatus = null;
+  let isLoadingOpenMergeRequests = false;
+  let openMergeRequestsPage = 0;
+  let hasMoreOpenMergeRequests = false;
   let branchStatusProjects = [];
   let branchProjectsStatus = null;
   let isLoadingBranchProjects = false;
@@ -1245,6 +1322,33 @@
     }
 
     return mergeRequests;
+  }
+
+  async function loadOpenMergeRequests({ loadMore = false } = {}) {
+    if (isLoadingOpenMergeRequests || (loadMore && !hasMoreOpenMergeRequests)) return;
+    isLoadingOpenMergeRequests = true;
+    if (!loadMore) {
+      openMergeRequests = [];
+      openMergeRequestsPage = 0;
+      hasMoreOpenMergeRequests = false;
+    }
+    openMergeRequestsStatus = createStatus(
+      loadMore ? 'loadingMoreOpenMergeRequests' : 'loadingOpenMergeRequests',
+    );
+    renderWidget();
+    try {
+      const nextPage = openMergeRequestsPage + 1;
+      const result = await fetchOpenMergeRequestsPage(fetchJson, window.location.origin, nextPage);
+      openMergeRequests = appendOpenMergeRequests(openMergeRequests, result.items);
+      openMergeRequestsPage = nextPage;
+      hasMoreOpenMergeRequests = result.hasMore;
+      openMergeRequestsStatus = null;
+    } catch (error) {
+      openMergeRequestsStatus = statusFromError(error, 'openMergeRequestsFailed');
+    } finally {
+      isLoadingOpenMergeRequests = false;
+      renderWidget();
+    }
   }
 
   async function fetchProjects(filterName) {
@@ -1817,6 +1921,58 @@
     return item;
   }
 
+  function renderOpenMergeRequest(mergeRequest) {
+    const item = createElement('li', 'qgqr-item qgqr-open-mr-item');
+    const content = createElement('div', 'qgqr-item-content');
+    const title = createElement('a', 'qgqr-mr-link qgqr-open-mr-title', mergeRequest.title);
+    title.href = mergeRequest.webUrl;
+    title.target = '_blank';
+    title.rel = 'noopener noreferrer';
+    content.append(
+      title,
+      createElement('span', 'qgqr-detail qgqr-open-mr-project',
+        `${mergeRequest.targetProject.pathWithNamespace} !${mergeRequest.iid}`),
+    );
+    if (mergeRequest.sourceBranch && mergeRequest.targetBranch) {
+      content.append(createElement('span', 'qgqr-detail qgqr-open-mr-branches',
+        `${mergeRequest.sourceBranch} → ${mergeRequest.targetBranch}`));
+    }
+    content.append(createElement('span', 'qgqr-detail', t('mergeRequestCreatedOn', {
+      date: formatDate(mergeRequest.createdAt),
+    })));
+
+    const actions = createElement('div', 'qgqr-open-mr-actions');
+    const openLink = createElement('a', 'qgqr-open-mr-action');
+    openLink.href = mergeRequest.webUrl;
+    openLink.target = '_blank';
+    openLink.rel = 'noopener noreferrer';
+    openLink.append(createIcon('arrow'), createElement('span', '', t('openMergeRequest')));
+    const copyButton = createElement('button', 'qgqr-open-mr-action');
+    copyButton.type = 'button';
+    const copyLabel = createElement('span', '', t('copyMergeRequestUrl'));
+    copyLabel.setAttribute('aria-live', 'polite');
+    copyButton.append(createIcon('copy'), copyLabel);
+    let copyFeedbackTimer = null;
+    copyButton.addEventListener('click', async () => {
+      copyButton.disabled = true;
+      const copied = await copyTextToClipboard(mergeRequest.webUrl, navigator.clipboard);
+      copyLabel.textContent = t(copied ? 'mergeRequestUrlCopied' : 'copyRepositoryUrlFailed');
+      copyButton.classList.toggle('qgqr-menu-action-success', copied);
+      copyButton.classList.toggle('qgqr-menu-action-error', !copied);
+      copyButton.disabled = false;
+      window.clearTimeout(copyFeedbackTimer);
+      copyFeedbackTimer = window.setTimeout(() => {
+        if (!copyButton.isConnected) return;
+        copyLabel.textContent = t('copyMergeRequestUrl');
+        copyButton.classList.remove('qgqr-menu-action-success', 'qgqr-menu-action-error');
+      }, COPY_FEEDBACK_DURATION_MS);
+    });
+    actions.append(copyButton, openLink);
+    content.append(actions);
+    item.append(content);
+    return item;
+  }
+
   function renderSearchGroup(group, index) {
     const item = createElement('li', 'qgqr-item');
     item.append(createElement('span', 'qgqr-rank', String(index + 1)));
@@ -2035,53 +2191,58 @@
 
     const isFavoritesView = activeView === VIEW_FAVORITES;
     const isBranchesView = activeView === VIEW_BRANCHES;
+    const isOpenMrsView = activeView === VIEW_OPEN_MRS;
     const isSearchMode = activeView === VIEW_RECENT && searchQuery.length > 0;
-    const recentGroups = buildRecentMrGroups(projects, mergeRequests);
-    const groups = isBranchesView
-      ? branchStatusProjects
-      : (isFavoritesView
-        ? favoriteProjects
-        : (isSearchMode ? buildSearchProjectGroups(searchProjects) : recentGroups));
-    const renderItem = isBranchesView
-      ? renderBranchProject
-      : (isFavoritesView
-        ? renderFavoriteProject
-        : (isSearchMode ? renderSearchGroup : renderGroup));
+    const view = {
+      [VIEW_RECENT]: {
+        groups: isSearchMode
+          ? buildSearchProjectGroups(searchProjects)
+          : buildRecentMrGroups(projects, mergeRequests),
+        renderItem: isSearchMode ? renderSearchGroup : renderGroup,
+        status: isSearchMode ? searchStatus : recentStatus,
+        empty: t(isSearchMode ? 'noSearchResults' : 'noRecentMergeRequests', { query: searchQuery }),
+        subtitle: t(isSearchMode
+          ? (onlyOwnedSearch ? 'ownedSearchSubtitle' : 'globalSearchSubtitle')
+          : 'recentSubtitle'),
+      },
+      [VIEW_FAVORITES]: {
+        groups: favoriteProjects,
+        renderItem: renderFavoriteProject,
+        status: null,
+        empty: t('noFavorites'),
+        subtitle: t('favoritesSubtitle', { count: favoriteProjects.length }),
+      },
+      [VIEW_BRANCHES]: {
+        groups: branchStatusProjects,
+        renderItem: renderBranchProject,
+        status: branchProjectsStatus,
+        empty: t('noBranchProjects'),
+        subtitle: t('branchesSubtitle'),
+      },
+      [VIEW_OPEN_MRS]: {
+        groups: openMergeRequests,
+        renderItem: renderOpenMergeRequest,
+        status: openMergeRequestsStatus,
+        empty: t('noOpenMergeRequests'),
+        subtitle: t('openMergeRequestsSubtitle', { count: openMergeRequests.length }),
+      },
+    }[activeView];
+    const { groups, renderItem, status: activeStatus } = view;
     widget.querySelector('.qgqr-list').replaceChildren(...groups.map(renderItem));
     widget.querySelector('.qgqr-count').textContent = String(groups.length);
     const statusElement = widget.querySelector('.qgqr-status');
-    const activeStatus = isBranchesView
-      ? branchProjectsStatus
-      : (isFavoritesView ? null : (isSearchMode ? searchStatus : recentStatus));
-    const emptyStatus = isBranchesView
-      ? t('noBranchProjects')
-      : (isFavoritesView
-        ? t('noFavorites')
-        : t(
-          isSearchMode ? 'noSearchResults' : 'noRecentMergeRequests',
-          { query: searchQuery },
-        ));
     statusElement.textContent = groups.length === 0 && !activeStatus
-      ? emptyStatus
+      ? view.empty
       : statusText(activeStatus);
     statusElement.hidden = groups.length > 0 && !activeStatus;
-    widget.querySelector('.qgqr-subtitle').textContent = isBranchesView
-      ? t('branchesSubtitle')
-      : (isFavoritesView
-        ? t('favoritesSubtitle', { count: favoriteProjects.length })
-        : (isSearchMode
-          ? (onlyOwnedSearch
-            ? t('ownedSearchSubtitle')
-            : t('globalSearchSubtitle'))
-          : t('recentSubtitle')));
+    widget.querySelector('.qgqr-subtitle').textContent = view.subtitle;
     const refreshButton = widget.querySelector('.qgqr-refresh');
-    const refreshesBranchStatuses = activeView === VIEW_BRANCHES;
-    const refreshIsLoading = refreshesBranchStatuses
+    const refreshIsLoading = isBranchesView
       ? isRefreshingBranchStatuses
-      : isRefreshing;
-    const refreshLabel = refreshesBranchStatuses
+      : (isOpenMrsView ? isLoadingOpenMergeRequests : isRefreshing);
+    const refreshLabel = isBranchesView
       ? t(refreshIsLoading ? 'checkingAllBranchStatuses' : 'refreshBranchStatuses')
-      : t(refreshIsLoading ? 'refreshing' : 'refreshRecent');
+      : t(refreshIsLoading ? 'refreshing' : (isOpenMrsView ? 'refreshOpenMergeRequests' : 'refreshRecent'));
     refreshButton.hidden = isFavoritesView || isSearchMode;
     refreshButton.disabled = refreshIsLoading;
     refreshButton.classList.toggle('qgqr-is-spinning', refreshIsLoading);
@@ -2090,7 +2251,9 @@
     widget.querySelector('.qgqr-search-loader').hidden = !isSearching;
     widget.querySelector('.qgqr-search-clear').hidden = searchQuery.length === 0;
     widget.lang = currentLanguage;
-    widget.querySelector('.qgqr-toggle-label').textContent = t('toggleLabel');
+    widget.querySelector('.qgqr-toggle-label').textContent = t(
+      isOpenMrsView ? 'openMyOpenMergeRequests' : 'toggleLabel',
+    );
     const hasActionableUpdate = updateState.status === 'available' && !updateAwaitingReload;
     const updateTag = widget.querySelector('.qgqr-update-tag');
     const updateTagLabel = updateState.latestVersion
@@ -2106,6 +2269,11 @@
     homeButton.title = t('goHome');
     homeButton.setAttribute('aria-label', t('goHome'));
     widget.querySelector('.qgqr-title').textContent = t('appTitle');
+    const openMrsButton = widget.querySelector('.qgqr-open-mrs-button');
+    openMrsButton.title = t('openMyOpenMergeRequests');
+    openMrsButton.setAttribute('aria-label', t('openMyOpenMergeRequests'));
+    openMrsButton.setAttribute('aria-pressed', String(isOpenMrsView));
+    openMrsButton.classList.toggle('qgqr-active', isOpenMrsView);
     const branchesButton = widget.querySelector('.qgqr-branches-button');
     const branchesButtonLabel = t(isBranchesView ? 'showRecentProjects' : 'openBranches');
     branchesButton.title = branchesButtonLabel;
@@ -2159,6 +2327,12 @@
     repositoryLink.title = t('repositoryLink');
     repositoryLink.setAttribute('aria-label', t('repositoryLink'));
     const settingsOpen = !widget.querySelector('.qgqr-settings').hidden;
+    const loadMoreButton = widget.querySelector('.qgqr-open-mrs-more');
+    loadMoreButton.hidden = settingsOpen || !isOpenMrsView || !hasMoreOpenMergeRequests;
+    loadMoreButton.disabled = isLoadingOpenMergeRequests;
+    loadMoreButton.textContent = t(
+      isLoadingOpenMergeRequests ? 'loadingMoreOpenMergeRequests' : 'loadMoreOpenMergeRequests',
+    );
     widget.querySelector('.qgqr-search-area').hidden = settingsOpen || activeView !== VIEW_RECENT;
     const branchToolbar = widget.querySelector('.qgqr-branch-toolbar');
     branchToolbar.hidden = settingsOpen || !isBranchesView;
@@ -2220,6 +2394,26 @@
       #${WIDGET_ID} { position: fixed; top: 76px; right: 18px; z-index: 10000; font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: var(--gl-text-color-default, #172033); }
       #${WIDGET_ID} * { box-sizing: border-box; }
       #${WIDGET_ID} svg, #${WIDGET_ID} svg * { fill: none !important; stroke: currentColor !important; stroke-width: 1.75 !important; }
+      #${WIDGET_ID} .qgqr-panel { display: flex; flex-direction: column; }
+      #${WIDGET_ID} .qgqr-panel[hidden] { display: none; }
+      #${WIDGET_ID} .qgqr-panel > :not(.qgqr-list) { flex-shrink: 0; }
+      #${WIDGET_ID} .qgqr-list { min-height: 0; }
+      #${WIDGET_ID} .qgqr-open-mrs-button.qgqr-active { border-color: #86cfa9; background: #ecfdf3; color: #167647; }
+      #${WIDGET_ID} .qgqr-open-mr-title { display: block; font-size: 13px; font-weight: 650; overflow-wrap: anywhere; }
+      #${WIDGET_ID} .qgqr-open-mr-title:hover { text-decoration: underline; }
+      #${WIDGET_ID} .qgqr-open-mr-project, #${WIDGET_ID} .qgqr-open-mr-branches { display: block; margin: 3px 0; overflow-wrap: anywhere; }
+      #${WIDGET_ID} .qgqr-open-mr-branches { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
+      #${WIDGET_ID} .qgqr-open-mr-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+      #${WIDGET_ID} .qgqr-open-mr-action { display: inline-flex; align-items: center; gap: 5px; min-height: 28px; border: 1px solid var(--gl-border-color-default, #dfe1e6); border-radius: 6px; padding: 4px 8px; background: transparent; color: var(--gl-text-color-link, #1f75cb); font: inherit; font-size: 11px; text-decoration: none; cursor: pointer; }
+      #${WIDGET_ID} .qgqr-open-mr-action:hover { background: var(--gl-background-color-subtle, #f4f2ff); }
+      #${WIDGET_ID} .qgqr-open-mr-action .qgqr-icon { width: 13px; height: 13px; flex-basis: 13px; }
+      #${WIDGET_ID} .qgqr-open-mr-action:disabled { opacity: .6; cursor: wait; }
+      #${WIDGET_ID} .qgqr-open-mr-action.qgqr-menu-action-success { color: #15803d; }
+      #${WIDGET_ID} .qgqr-open-mr-action.qgqr-menu-action-error { color: #b91c1c; }
+      #${WIDGET_ID} .qgqr-open-mrs-more { margin: 8px 12px 12px; border: 1px solid var(--gl-border-color-default, #dfe1e6); border-radius: 8px; padding: 8px; background: var(--gl-background-color-default, #fff); color: var(--gl-text-color-link, #1f75cb); cursor: pointer; font: inherit; font-size: 12px; }
+      #${WIDGET_ID} .qgqr-open-mrs-more[hidden] { display: none; }
+      #${WIDGET_ID} .qgqr-open-mrs-more:disabled { opacity: .6; cursor: wait; }
+      #${WIDGET_ID} .qgqr-open-mr-action:focus-visible, #${WIDGET_ID} .qgqr-open-mrs-more:focus-visible { outline: 2px solid #7c6cf2; outline-offset: 2px; }
       .qgqr-icon { width: 18px; height: 18px; flex: 0 0 18px; }
       .qgqr-inline-icon { width: 13px; height: 13px; margin-left: 3px; vertical-align: -2px; }
       .qgqr-update-tag { position: absolute; top: -11px; right: 10px; z-index: 2; display: inline-flex; min-height: 20px; align-items: center; border: 1px solid #8f7cff; border-radius: 999px; padding: 3px 8px; background: #7357f6; color: #fff; box-shadow: 0 3px 9px rgba(82,56,214,.28), inset 0 1px 0 rgba(255,255,255,.24); cursor: pointer; font: inherit; font-size: 9px; font-weight: 750; letter-spacing: .045em; line-height: 1; white-space: nowrap; animation: qgqr-update-tag-enter .18s ease-out; transition: background-color .18s ease, border-color .18s ease, box-shadow .18s ease; }
@@ -2391,6 +2585,7 @@
       @keyframes qgqr-spin { to { transform: rotate(360deg); } }
       @keyframes qgqr-dot-wave { 0%, 60%, 100% { opacity: .24; } 30% { opacity: .92; } }
       @media (prefers-color-scheme: dark) {
+        #${WIDGET_ID} .qgqr-open-mrs-button.qgqr-active { border-color: #287c50; background: rgba(22,118,71,.2); color: #86efac; }
         .qgqr-count, .qgqr-home-button { background: rgba(139,92,246,.2); color: #c4b5fd; }
         .qgqr-home-button:hover { background: rgba(139,92,246,.32); color: #ddd6fe; box-shadow: 0 5px 14px rgba(76,61,174,.28); }
         .qgqr-home-button:active { background: rgba(109,91,208,.38); color: #ede9fe; }
@@ -2410,7 +2605,12 @@
         .qgqr-type-upstream { color: #8daac5; }
       }
       @media (prefers-reduced-motion: reduce) { .qgqr-panel, .qgqr-update-tag, .qgqr-is-spinning .qgqr-icon, .qgqr-search-loader, .qgqr-branch-loading-dot { animation: none; } .qgqr-branch-loading-dot { opacity: .55; } * { scroll-behavior: auto !important; transition-duration: .01ms !important; } }
-      @media (max-width: 640px) { #${WIDGET_ID} { top: 62px; right: 8px; } .qgqr-toggle { padding: 7px 9px; } .qgqr-panel { width: min(480px, calc(100vw - 16px)); } }
+      @media (max-width: 640px) { #${WIDGET_ID} { top: 62px; right: 8px; } .qgqr-toggle { padding: 7px 9px; } .qgqr-panel { width: min(480px, calc(100vw - 32px)); } }
+      @media (max-width: 480px) {
+        #${WIDGET_ID} .qgqr-header { flex-wrap: wrap; gap: 6px; padding: 12px; }
+        #${WIDGET_ID} .qgqr-heading { flex-basis: calc(100% - 42px); }
+        #${WIDGET_ID} .qgqr-open-mrs-button { margin-left: auto; }
+      }
     `;
     document.head.append(style);
   }
@@ -2519,13 +2719,16 @@
     branchesButton.setAttribute('aria-label', t('openBranches'));
     branchesButton.setAttribute('aria-pressed', 'false');
     branchesButton.append(createIcon('branch'));
+    const openMrsButton = createElement('button', 'qgqr-action qgqr-open-mrs-button');
+    openMrsButton.type = 'button';
+    openMrsButton.append(createIcon('merge'));
     const settingsButton = createElement('button', 'qgqr-action qgqr-settings-button');
     settingsButton.type = 'button';
     settingsButton.title = t('settings');
     settingsButton.setAttribute('aria-label', t('settings'));
     settingsButton.setAttribute('aria-expanded', 'false');
     settingsButton.append(createIcon('settings'));
-    header.append(branchesButton, favoritesButton, settingsButton, refreshButton);
+    header.append(openMrsButton, branchesButton, favoritesButton, settingsButton, refreshButton);
     const settings = createElement('section', 'qgqr-settings');
     settings.hidden = true;
     settings.append(
@@ -2650,13 +2853,19 @@
     branchHelp.tabIndex = 0;
     branchHelp.append(createIcon('info'));
     branchToolbar.append(branchLegend, branchHelp);
+    const loadMoreButton = createElement('button', 'qgqr-open-mrs-more');
+    loadMoreButton.type = 'button';
+    loadMoreButton.hidden = true;
+    const status = createElement('span', 'qgqr-status', statusText(recentStatus));
+    status.setAttribute('role', 'status');
     panel.append(
       header,
       settings,
       searchArea,
       branchToolbar,
       createElement('ol', 'qgqr-list'),
-      createElement('span', 'qgqr-status', statusText(recentStatus)),
+      status,
+      loadMoreButton,
     );
     widget.append(updateTag, toggle, panel);
     document.body.append(widget);
@@ -2665,6 +2874,7 @@
       panel.hidden = !panel.hidden;
       toggle.setAttribute('aria-expanded', String(!panel.hidden));
       if (panel.hidden) closeProjectMenus(widget);
+      if (!panel.hidden && activeView === VIEW_OPEN_MRS) void loadOpenMergeRequests();
     });
     homeButton.addEventListener('click', () => {
       const defaultNavigationState = getDefaultNavigationState();
@@ -2681,10 +2891,21 @@
       if (activeView === VIEW_BRANCHES) {
         editingBranchDescriptionKey = null;
         await loadBranchStatusView({ force: true });
+      } else if (activeView === VIEW_OPEN_MRS) {
+        await loadOpenMergeRequests();
       } else {
         await refreshData({ force: true });
       }
     });
+    openMrsButton.addEventListener('click', async () => {
+      activeView = activeView === VIEW_OPEN_MRS ? VIEW_RECENT : VIEW_OPEN_MRS;
+      editingBranchDescriptionKey = null;
+      settings.hidden = true;
+      settingsButton.setAttribute('aria-expanded', 'false');
+      renderWidget();
+      if (activeView === VIEW_OPEN_MRS) await loadOpenMergeRequests();
+    });
+    loadMoreButton.addEventListener('click', () => loadOpenMergeRequests({ loadMore: true }));
     branchesButton.addEventListener('click', async () => {
       activeView = activeView === VIEW_BRANCHES ? VIEW_RECENT : VIEW_BRANCHES;
       editingBranchDescriptionKey = null;

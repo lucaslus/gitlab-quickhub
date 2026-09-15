@@ -48,6 +48,14 @@ In enterprise GitLab instances, default project activity rankings rarely reflect
 - Uncheck to search all accessible projects across the entire GitLab instance.
 - Cancels in-flight requests on new inputs to prevent race conditions.
 
+### My Open MRs
+- Click the MR icon in the panel header ("My open MRs") to list MRs **created by you** that are still `opened`, including drafts.
+- Shows each MR's title, target repository, MR number, source/target branches, and creation date, newest first.
+- Click the title or **Open MR** to open the MR in a new tab; **Copy link** copies its detail URL and shows success or failure feedback.
+- Fetches 50 MRs per page. Use **Load more MRs** for older open MRs, independently of the Recent view's 20-project / 5-page limits. The count shows loaded MRs, not the account-wide total.
+- Reloads from page one whenever you enter or reopen this view, or click Refresh. Results stay in page memory only; they do not use the recent-project cache or add local storage keys.
+- Loading, empty results, API errors, and invalid responses are shown explicitly. A failed next page keeps the loaded list and can be retried with **Load more MRs**.
+
 ### Quick Actions Menu
 Each repository item has a quick-star button on the right, plus an overflow `…` menu:
 - **Select Branch & New MR**: Open the New MR page in the selected repository without locking the target branch.
@@ -147,12 +155,15 @@ The script interacts with the following GitLab v4 APIs:
 | Feature | Endpoint | Parameters |
 | --- | --- | --- |
 | Recent MRs | `GET /api/v4/merge_requests` | `scope=created_by_me`, `state=all`, sorted by `created_at` desc |
+| My Open MRs | `GET /api/v4/merge_requests` | `scope=created_by_me`, `state=opened`, `order_by=created_at`, `sort=desc`, `per_page=50`, `page=<page>` |
 | Membership Projects | `GET /api/v4/projects` | `membership=true`, exclude archived |
 | Owned Projects | `GET /api/v4/projects` | `owned=true`, exclude archived, sorted by `last_activity_at` desc |
 | Project Search | `GET /api/v4/projects` | `search=<query>`, optional `owned=true` |
 | Search Fallback | `GET /api/v4/search` | `scope=projects`, `search=<query>` |
 | Project Branches | `GET /api/v4/projects/:id/repository/branches` | Up to 100 branches per request |
 | Merge Status Comparison | `GET /api/v4/projects/:id/repository/compare` | `:id`=Fork ID, `from=<target>`, `to=<branch>`, `from_project_id=<Upstream ID>` |
+
+The Open MR filter uses GitLab's [list merge requests API](https://docs.gitlab.com/api/merge_requests/#list-merge-requests). Results reflect the last request; refresh after merging or closing an MR in another tab. Pagination follows the live list, so concurrent changes can shift page boundaries; refreshing restarts the list. Invalid or cross-origin MR URLs produce a visible response error and are never opened or copied.
 
 ---
 

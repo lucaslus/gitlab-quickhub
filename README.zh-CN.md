@@ -159,6 +159,17 @@ userscript 不能绕过 Tampermonkey 的安全确认静默替换自身。已打�
 
 搜索使用 350ms debounce。开始新的搜索时会取消尚未完成的旧请求，避免旧结果覆盖新结果。
 
+### 我 Open 的 MR
+
+1. 打开面板，点击顶部 MR 图标（“我 Open 的 MR”）。
+2. 列表仅展示**当前用户创建、状态为 `opened`** 的 MR，包含 Draft，按创建时间倒序排列。
+3. 每条展示标题、目标仓库、MR 编号、源分支 → 目标分支和创建日期。
+4. 点击标题或“打开 MR”在新标签页跳转；点击“复制链接”复制该 MR 的详情地址，操作后会提示成功或失败。
+5. 每页读取 50 条，点击“加载更多 MR”继续查看较早的 Open MR；计数表示当前已加载数量，不是账号的总数。
+6. 每次进入或重新展开该视图、点击刷新按钮时，都会从第一页重新查询。其他标签页完成合并或关闭后，可刷新获取最新状态。
+
+该列表独立于“最近 MR 仓库”，不受 20 组仓库或 5 页历史数据上限限制。数据仅存在当前页面内存中，不使用最近项目缓存，不新增本地存储 Key。加载中、空列表、API 和解析失败均会明确提示；加载下一页失败时保留已加载列表，可再次点击“加载更多 MR”重试。分页期间若 MR 状态变化，条目可能跨页移动，刷新可重新开始查询。
+
 ### 检查分支状态
 
 1. 打开脚本面板并点击右上角的分支图标。
@@ -215,6 +226,7 @@ userscript 管理器必须在脚本安装时确定允许脚本加载的网站。
 | 用途 | API | 主要参数 |
 | --- | --- | --- |
 | 最近 MR | `GET /api/v4/merge_requests` | `scope=created_by_me`、`state=all`、按 `created_at` 倒序 |
+| 我 Open 的 MR | `GET /api/v4/merge_requests` | `scope=created_by_me`、`state=opened`、`order_by=created_at`、`sort=desc`、`per_page=50`、`page=<页码>` |
 | 成员项目 | `GET /api/v4/projects` | `membership=true`、排除 archived |
 | 自有项目 | `GET /api/v4/projects` | `owned=true`、排除 archived、按 `last_activity_at` 倒序 |
 | 项目搜索 | `GET /api/v4/projects` | `search=<query>`，可选 `owned=true` |
@@ -223,6 +235,8 @@ userscript 管理器必须在脚本安装时确定允许脚本加载的网站。
 | Fork 合入判断 | `GET /api/v4/projects/:id/repository/compare` | Fork 项目作为 `:id`，`from=<环境分支>`、`to=<业务分支>`、`from_project_id=<Upstream ID>` |
 
 最近 MR 最多读取 5 页，每页最多 100 条；获得足够的项目组后会提前停止。项目列表请求每类最多读取 100 个项目，分支状态从这批按活跃时间倒序的自有项目中选出前 10 个 Fork。这些限制用于控制请求量，不保证覆盖账号可访问的全部历史数据。
+
+“我 Open 的 MR”使用 GitLab 官方 [MR 列表 API](https://docs.gitlab.com/api/merge_requests/#list-merge-requests) 的创建者与状态筛选，每页 50 条并允许继续加载。MR URL 必须通过当前 origin 校验；无效或跨域 URL 会显示响应错误，不生成跳转或复制入口。
 
 进入分支视图时会请求各 Fork 的分支列表、Upstream 环境分支和 compare API，并自动生成合入状态。同一业务分支最多并行检查 4 个目标环境；项目之间并行，单个项目内部逐分支处理。
 
@@ -352,6 +366,7 @@ dist/gitlab-quickhub.user.js
 测试直接加载源码文件暴露的纯函数，覆盖：
 
 - MR 和项目 API 数据规范化。
+- 我创建的 Open MR 查询、分页、排序去重、Draft、源仓库删除、复制链接和错误处理。
 - 非同源 URL 拒绝。
 - Fork/Upstream 分组和排序。
 - 搜索参数和 fallback。
