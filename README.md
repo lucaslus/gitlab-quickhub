@@ -105,6 +105,8 @@ Each repository item has a quick-star button on the right, plus an overflow `…
 4. Navigate to your HTTPS GitLab instance.
 5. Follow the **First-Time Domain Activation** step below.
 
+If you installed the original **GitLab 最近 MR 仓库快捷入口** from the archived `userscripts` repository, disable that entry in your userscript manager and leave **GitLab QuickHub** enabled. The renamed script is installed as a separate entry. Disabling the old entry in the manager keeps your domain activation, favorites, and branch descriptions.
+
 ### First-Time Domain Activation
 To protect your privacy and ensure zero unwanted executions, GitLab QuickHub does not hardcode any company domains:
 1. When opening an HTTPS GitLab page, the script detects GitLab metadata.
@@ -142,9 +144,11 @@ Data is saved in `localStorage` under the current GitLab origin:
 | `gitlab-recent-mr-repos:enabled-origin:v1` | User-approved HTTPS origin | Until disabled / cleared |
 | `gitlab-recent-mr-repos:language:v1` | Preferred UI language (`zh-CN` / `en`) | Until cleared |
 | `gitlab-recent-mr-repos:cache:v3` | Normalized projects, MRs, and timestamp | 10 minutes |
-| `gitlab-recent-mr-repos:update:v1` | Last update check time and published version | 6 hours |
+| `gitlab-quickhub:update:v1` | Last update check time and published version for QuickHub | 10 minutes |
 | `gitlab-recent-mr-repos:favorites:v1` | Starred repositories | Until unstarred / cleared |
 | `gitlab-recent-mr-repos:branch-descriptions:v1` | Custom branch notes | Until cleared |
+
+QuickHub checks its own installation URL on the first run after upgrading to 3.17.1; it no longer reads the archived script's update cache.
 
 ---
 

@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const { readFileSync } = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
+const { runInNewContext } = require('node:vm');
 const {
   appendOpenMergeRequests,
   buildOpenMergeRequestsPath,
@@ -103,6 +104,72 @@ test('does not initialize on unrelated HTTPS pages', () => {
   assert.equal(isGitLabPage(documentWithMetadata({
     'meta[name="generator"]': 'WordPress',
   })), false);
+});
+
+test('QuickHub renders its own recent projects when the archived widget already exists', async () => {
+  class Element {
+    children = [];
+    classList = { toggle() {} };
+
+    append(...children) { this.children.push(...children); }
+    replaceChildren(...children) { this.children = children; }
+    setAttribute() {}
+    addEventListener() {}
+
+    querySelector(selector) {
+      for (const child of this.children) {
+        if (!(child instanceof Element)) continue;
+        if (selector.startsWith('#') && child.id === selector.slice(1)) return child;
+        if (selector.startsWith('.') && child.className?.split(' ').includes(selector.slice(1))) return child;
+        const match = child.querySelector(selector);
+        if (match) return match;
+      }
+      return null;
+    }
+  }
+
+  const root = new Element();
+  const document = {
+    ...documentWithMetadata({ 'meta[name="application-name"]': 'GitLab' }),
+    head: new Element(),
+    body: new Element(),
+    createElement: () => new Element(),
+    createElementNS: () => new Element(),
+    createTextNode: (text) => text,
+    getElementById: (id) => root.querySelector(`#${id}`),
+    addEventListener() {},
+    visibilityState: 'hidden',
+  };
+  root.append(document.head, document.body);
+  const legacyWidget = new Element();
+  legacyWidget.id = 'gitlab-recent-mr-repos';
+  legacyWidget.textContent = 'Archived widget';
+  document.body.append(legacyWidget);
+  const storage = new Map([['gitlab-recent-mr-repos:enabled-origin:v1', ORIGIN]]);
+  const window = {
+    location: { origin: ORIGIN },
+    localStorage: {
+      getItem: (key) => storage.get(key) ?? null,
+      setItem: (key, value) => storage.set(key, value),
+    },
+    async fetch(path) {
+      const payload = path.startsWith('/api/v4/merge_requests?') ? [openMergeRequestPayload()] : [];
+      return { ok: true, json: async () => payload };
+    },
+    setInterval() {},
+  };
+  const context = { document, window, navigator: { language: 'en' }, URL, URLSearchParams };
+
+  runInNewContext(USERSCRIPT_SOURCE, context);
+  await new Promise(setImmediate);
+  const quickHub = document.getElementById('gitlab-quickhub');
+  assert.equal(quickHub.querySelector('.qgqr-count').textContent, '1');
+  assert.equal(quickHub.querySelector('.qgqr-list').children.length, 1);
+  assert.equal(legacyWidget.textContent, 'Archived widget');
+  assert.equal(legacyWidget.children.length, 0);
+
+  runInNewContext(USERSCRIPT_SOURCE, context);
+  assert.deepEqual(document.body.children, [legacyWidget, quickHub]);
 });
 
 function memoryStorage(initialValue = null) {

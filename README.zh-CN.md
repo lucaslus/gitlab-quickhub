@@ -115,7 +115,7 @@ GitLab 的项目活跃度不能准确代表“我最近使用过哪些项目”�
 
 metadata 中的 `@namespace` 保留历史值，以维持已安装脚本的稳定身份；它不会用于网络请求。安装、更新、源码和 Issue 链接均使用当前的 `lucaslus` 地址。
 
-如果已安装的版本仍指向旧 GitHub Pages 地址，自动更新无法从已失效的地址自行迁移。请手动打开上方新安装地址并确认更新一次；之后会继续通过新地址自动更新。
+从已归档的 `userscripts` 仓库迁移时，请从上方地址安装 **GitLab QuickHub**，并在脚本管理器里停用旧的 **GitLab 最近 MR 仓库快捷入口**。改名后的脚本会安装为独立条目。通过脚本管理器停用旧条目会保留域名启用状态、收藏和分支描述。
 
 如需手动更新，可在 Tampermonkey 管理面板中执行“检查用户脚本更新”，或重新打开安装地址。
 
@@ -213,11 +213,11 @@ userscript 管理器必须在脚本安装时确定允许脚本加载的网站。
 | `gitlab-recent-mr-repos:enabled-origin:v1` | 用户确认启用的 HTTPS origin | 直到停用或清除站点数据 |
 | `gitlab-recent-mr-repos:language:v1` | 手动选择的界面语言 | 直到清除站点数据 |
 | `gitlab-recent-mr-repos:cache:v3` | 标准化后的项目、MR 和抓取时间 | 默认有效 10 分钟 |
-| `gitlab-recent-mr-repos:update:v1` | 最近检查时间和已发布版本 | 默认有效 6 小时 |
+| `gitlab-quickhub:update:v1` | 独立版的最近检查时间和已发布版本 | 默认有效 10 分钟 |
 | `gitlab-recent-mr-repos:favorites:v1` | 收藏仓库的必要项目入口信息 | 直到取消收藏或清除站点数据 |
 | `gitlab-recent-mr-repos:branch-descriptions:v1` | 按项目 ID 和分支名保存的分支描述 | 直到清空描述或清除站点数据 |
 
-缓存用于减少重复 API 请求。缓存数据不会跨 origin 共享。
+缓存用于减少重复请求，不会跨 origin 共享。升级到 3.17.1 后，独立版会重新检查自己的安装地址，不再读取旧脚本的更新缓存。
 
 ## GitLab API 使用
 
@@ -407,7 +407,7 @@ dist/gitlab-quickhub.user.js
 6. **排名语义稳定**：最近项目按当前用户创建 MR 的时间排序，不得退化为项目活跃度排序。
 7. **Fork 配对稳定**：搜索和最近 MR 两条链路都要保持 Fork/Upstream 分组。
 8. **搜索行为稳定**：默认仅我的仓库；全局搜索失败时保留 GitLab search API fallback。
-9. **UI 隔离**：样式必须限定在 `#gitlab-recent-mr-repos`，尤其要防止宿主页覆盖 SVG 图标样式。
+9. **UI 隔离**：独立版容器为 `#gitlab-quickhub`，避免与旧脚本的容器冲突；尤其要防止宿主页覆盖 SVG 图标样式。
 10. **失败可见**：API、解析、存储和搜索失败必须有用户可理解的状态，不得静默继续。
 11. **更新来源唯一**：更新 Tag 和红点必须比较当前安装版本和已经部署的 `.user.js`，不得根据未部署的源码版本提前提示。
 

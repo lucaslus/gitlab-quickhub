@@ -1,6 +1,6 @@
 {
   "name": "gitlab-quickhub",
-  "version": "3.17.0",
+  "version": "3.17.1",
   "description": "Quick access to recent GitLab MR repositories, favorites, search, and branch merge status.",
   "scripts": {
     "check": "node --check src/gitlab-quickhub.user.js && node --check scripts/build.mjs",
